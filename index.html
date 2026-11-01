@@ -1890,6 +1890,52 @@ function scheduleAutosave(){
     isSaving=false;
   },1200);
 }
+/* ═══ Bilateral cases: finish one side only ═══ */
+function askChoice(msg,labels){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');ov.className='cf-overlay';
+    const box=document.createElement('div');box.className='cf-box';
+    const m=document.createElement('div');m.className='cf-msg';m.textContent=String(msg);box.appendChild(m);
+    const done=v=>{document.removeEventListener('keydown',onKey,true);ov.remove();resolve(v);};
+    function onKey(e){if(e.key==='Escape'){e.stopPropagation();done(null);}}
+    document.addEventListener('keydown',onKey,true);
+    labels.forEach((label,i)=>{
+      const b=document.createElement('button');
+      b.className=i===0?'btn-outline':'btn-primary';
+      b.textContent=label;
+      b.style.cssText='width:100%;min-height:44px;margin-bottom:8px;font-size:14px';
+      b.addEventListener('click',()=>done(i));
+      box.appendChild(b);
+    });
+    const c=document.createElement('button');c.className='btn-outline';c.textContent='إلغاء';
+    c.style.cssText='width:100%;min-height:42px;font-size:14px';
+    c.addEventListener('click',()=>done(null));box.appendChild(c);
+    ov.appendChild(box);document.body.appendChild(ov);
+    ov.addEventListener('click',e=>{if(e.target===ov)done(null);});
+  });
+}
+let prevStatusForSide=null;
+document.getElementById('pStatus').addEventListener('input',()=>{
+  prevStatusForSide=currentPatient?currentPatient.status:null;
+});
+document.getElementById('pStatus').addEventListener('change',async()=>{
+  if(!currentPatient)return;
+  const sel=document.getElementById('pStatus'),side=document.getElementById('pSide');
+  if(sel.value!=='done'||side.value!=='bilateral')return;
+  const c=await askChoice('الحالة ثنائية (يمين وشمال).\nإيه اللي انتهى؟',
+    ['إنهاء الحالة كلها','خلص الجانب اليمين بس (يفضل الشمال)','خلص الجانب الشمال بس (يفضل اليمين)']);
+  const prev=(prevStatusForSide&&prevStatusForSide!=='done'&&prevStatusForSide!=='cancelled')?prevStatusForSide:'active';
+  if(c===null){sel.value=prevStatusForSide||'active';}
+  else if(c===1||c===2){
+    const finished=c===1?'right':'left';
+    side.value=c===1?'left':'right';
+    sel.value=prev;
+    currentPatient.sideLog=[...(currentPatient.sideLog||[]),{ts:Date.now(),finished:finished}];
+  }
+  readFormIntoPatient();updatePatientBadges();scheduleAutosave();
+  if(c===1||c===2)renderTimeline();
+});
+
 ['pName','pDob','pGender','pStatus','pSide','pHeight','pWeight','pAllergies',
  'pChronic','pCurrentMeds','pSurgeryType','pSurgeryCustom','pSurgeryDate',
  'pVisitDate','pFirstVisit','pDiagnosis','pPlan','pNotes','quickNote'].forEach(id=>{
@@ -2181,6 +2227,9 @@ function renderTimeline(){
   if(p.surgeryDate)events.push({ts:new Date(p.surgeryDate+'T00:00:00').getTime(),type:'surgery',title:'🔪 الجراحة',desc:(p.surgeryType==='Other'?p.surgeryCustom:p.surgeryType)||p.surgeryCustom||''});
   (p.followups||[]).forEach(f=>{
     events.push({ts:new Date(f.date+'T00:00:00').getTime(),type:'followup',title:'📅 متابعة',desc:f.note||''});
+  });
+  (p.sideLog||[]).forEach(e=>{
+    events.push({ts:e.ts,type:'visit',title:'✅ انتهى علاج الجانب '+(e.finished==='right'?'اليمين':'الشمال'),desc:'الجانب المتبقي: '+(e.finished==='right'?'الشمال':'اليمين')});
   });
   const imgGroups={};
   [...(currentImages.preop||[]),...(currentImages.postop||[])].forEach(img=>{
