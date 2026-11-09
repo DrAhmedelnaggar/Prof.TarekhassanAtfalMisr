@@ -175,6 +175,8 @@ button,.btn{font-family:inherit;cursor:pointer;border:none;border-radius:7px;fon
 .image-card .img-del{position:absolute;top:4px;left:4px;background:rgba(192,57,43,.9);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;padding:0;line-height:1}
 .image-card .img-primary{position:absolute;top:4px;right:4px;background:rgba(232,185,63,.95);color:#12283f;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;padding:0;line-height:1}
 .image-card .img-primary.active{background:var(--gold)}
+.img-edit{position:absolute;top:4px;left:34px;background:rgba(27,58,92,.92);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;padding:0;line-height:1}
+.health-card-preview .hc-edit{position:absolute;top:2px;left:26px;background:rgba(27,58,92,.92);color:#fff;border-radius:50%;width:20px;height:20px;font-size:10px;padding:0;line-height:1;display:flex;align-items:center;justify-content:center}
 .empty-hint{text-align:center;color:var(--muted);font-size:12.5px;padding:28px 10px;border:1.5px dashed var(--border);border-radius:8px;background:var(--soft)}
 
 .health-card-slot{display:flex;gap:10px;align-items:flex-start}
@@ -286,6 +288,7 @@ body.dark .install-modal-content .tip-box{background:#1a2f24;color:#9ccfb3}
 
 .print-area{display:none}
 @media print{
+#printArea{color:#1a1a1a}
   body>*:not(.print-area){display:none !important}
   .print-area{display:block !important;background:#fff;color:#000;font-family:'Segoe UI',Tahoma,Arial,sans-serif}
   @page{size:A4;margin:1.2cm 1.1cm}
@@ -302,6 +305,10 @@ body.dark .install-modal-content .tip-box{background:#1a2f24;color:#9ccfb3}
   .print-fu-list li{padding:3px 0;border-bottom:1px dotted #ccc}
   .print-images{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
   .print-images img{width:100%;height:auto;border:1px solid #ccc;border-radius:3px}
+.print-attach{margin:8px 0;text-align:center;page-break-inside:avoid}
+.print-attach img{max-width:100%;max-height:640px;border:1px solid #ccc;border-radius:3px}
+.print-attach .cap{font-size:10px;color:#555;margin-top:2px}
+.print-attach-list{font-size:11px;margin:6px 0;line-height:1.9}
   .print-footer{margin-top:16px;text-align:center;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:6px}
   .print-allergy-alert{background:#ffebee;border:2px solid #c0392b;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:700;color:#c0392b}
   .print-table{width:100%;border-collapse:collapse;font-size:10.5px}
@@ -497,6 +504,7 @@ body.dark .install-modal-content .tip-box{background:#1a2f24;color:#9ccfb3}
             </div>
             <div style="flex:1;font-size:11.5px;color:var(--muted);line-height:1.6">صورة كارنيه الرعاية الصحية — صورة واحدة.</div>
             <input type="file" id="healthCardInput" accept="image/*" capture="environment" style="display:none;">
+              <input type="file" id="healthCardGallery" accept="image/*" style="display:none;">
           </div>
         </div>
 
@@ -621,6 +629,7 @@ body.dark .install-modal-content .tip-box{background:#1a2f24;color:#9ccfb3}
       </div>
 
       <div class="tab-content" id="tab-timeline">
+        <div style="margin-bottom:10px"><button class="btn-outline btn-sm" id="timelineSortBtn"></button></div>
         <div class="timeline" id="timelineList"></div>
         <div class="empty-hint" id="timelineEmpty">لا توجد أحداث</div>
       </div>
@@ -649,6 +658,7 @@ body.dark .install-modal-content .tip-box{background:#1a2f24;color:#9ccfb3}
     <label><input type="checkbox" data-print="growthChart"> 📈 النمو - رسم بياني</label>
     <label><input type="checkbox" data-print="preop"> 🖼️ صور قبل</label>
     <label><input type="checkbox" data-print="postop"> 🖼️ صور بعد</label>
+    <label><input type="checkbox" data-print="attachments"> 📎 المرفقات</label>
     <div class="modal-actions">
       <button class="btn-primary" id="confirmPrint">تنفيذ</button>
       <button class="btn-outline" id="cancelPrint">إلغاء</button>
@@ -1812,7 +1822,16 @@ function renderHealthCard(){
   if(!currentPatient)return;
   const preview=document.getElementById('healthCardPreview');
   if(currentPatient.healthCard){
-    preview.innerHTML=`<img src="${escapeHtml(currentPatient.healthCard)}" alt=""><button class="hc-del" title="حذف">✕</button>`;
+    preview.innerHTML=`<img src="${escapeHtml(currentPatient.healthCard)}" alt=""><button class="hc-del" title="حذف">✕</button><button class="hc-edit" title="تعديل">✏️</button>`;
+    preview.querySelector('.hc-edit').addEventListener('click',async(e)=>{
+      e.stopPropagation();
+      const nd=await editStoredImage(currentPatient.healthCard);
+      if(!nd)return;
+      currentPatient.healthCard=nd;
+      currentPatient.updatedAt=Date.now();
+      await savePatientRecord(currentPatient);
+      renderHealthCard();
+    });
     preview.querySelector('.hc-del').addEventListener('click',async(e)=>{
       e.stopPropagation();
       if(!await askConfirm('حذف صورة الكارنيه؟'))return;
@@ -1824,20 +1843,44 @@ function renderHealthCard(){
     preview.onclick=()=>openLightbox(currentPatient.healthCard);
   }else{
     preview.innerHTML=`<div class="hc-hint">📷<br>اضغط لإضافة</div>`;
-    preview.onclick=()=>document.getElementById('healthCardInput').click();
+    preview.onclick=()=>pickImageSource('إضافة صورة الكارنيه',document.getElementById('healthCardInput'),document.getElementById('healthCardGallery'));
   }
 }
-document.getElementById('healthCardInput').addEventListener('change',async(e)=>{
+function pickImageSource(title,cameraInput,galleryInput){
+  const ov=document.createElement('div');ov.className='cf-overlay';
+  const box=document.createElement('div');box.className='cf-box';
+  const m=document.createElement('div');m.className='cf-msg';m.style.fontWeight='700';m.textContent=title;
+  box.appendChild(m);
+  const mk=(label,cls,input)=>{
+    const b=document.createElement('button');
+    b.className=cls;b.textContent=label;
+    b.style.cssText='width:100%;min-height:46px;margin-bottom:8px;font-size:15px';
+    b.addEventListener('click',()=>{ov.remove();input.click();});
+    box.appendChild(b);
+  };
+  mk('📷 كاميرا','btn-primary',cameraInput);
+  mk('🖼️ من المعرض','btn-primary',galleryInput);
+  const c=document.createElement('button');c.className='btn-outline';c.textContent='إلغاء';
+  c.style.cssText='width:100%;min-height:42px;font-size:14px';
+  c.addEventListener('click',()=>ov.remove());box.appendChild(c);
+  ov.appendChild(box);document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+}
+async function handleHealthCardFile(e){
   const f=e.target.files[0];e.target.value='';
   if(!f||!currentPatient)return;
   try{
-    const data=await compressIfLarge(f);
+    const ed=await editImageFile(f);
+    if(ed.action==='skip')return;
+    const data=ed.action==='edit'?ed.data:await compressIfLarge(f);
     currentPatient.healthCard=data;
     currentPatient.updatedAt=Date.now();
     await savePatientRecord(currentPatient);
     renderHealthCard();
   }catch(err){alert('فشل رفع الصورة');}
-});
+}
+document.getElementById('healthCardInput').addEventListener('change',handleHealthCardFile);
+document.getElementById('healthCardGallery').addEventListener('change',handleHealthCardFile);
 
 /* ═══════════════════════════════════════════════════════════
    READ FORM
@@ -2027,8 +2070,16 @@ function renderImages(type){
   imgs.forEach(img=>{
     const card=document.createElement('div');
     card.className='image-card'+(img.isPrimary?' is-primary':'');
-    card.innerHTML=`<img src="${escapeHtml(img.data)}" alt="${escapeHtml(img.name)}" loading="lazy"><button class="img-primary${img.isPrimary?' active':''}" title="${img.isPrimary?'إزالة Primary':'تعيين كـ Primary'}">${img.isPrimary?'⭐':'☆'}</button><div class="img-info">${escapeHtml(img.name||'صورة')}</div><button class="img-del" title="حذف">✕</button>`;
+    card.innerHTML=`<img src="${escapeHtml(img.data)}" alt="${escapeHtml(img.name)}" loading="lazy"><button class="img-primary${img.isPrimary?' active':''}" title="${img.isPrimary?'إزالة Primary':'تعيين كـ Primary'}">${img.isPrimary?'⭐':'☆'}</button><div class="img-info">${escapeHtml(img.name||'صورة')}</div><button class="img-del" title="حذف">✕</button><button class="img-edit" title="تعديل">✏️</button>`;
     card.querySelector('img').addEventListener('click',()=>openLightbox(img.data));
+    card.querySelector('.img-edit').addEventListener('click',async(e)=>{
+      e.stopPropagation();
+      const nd=await editStoredImage(img.data);
+      if(!nd)return;
+      img.data=nd;
+      await saveImageRecord(img);
+      renderImages(type);
+    });
     card.querySelector('.img-del').addEventListener('click',async(e)=>{
       e.stopPropagation();
       if(!await askConfirm('حذف هذه الصورة؟'))return;
@@ -2058,12 +2109,207 @@ function renderImages(type){
     grid.appendChild(card);
   });
 }
+/* ═══════════════════════════════════════════════════════════
+   IMAGE EDITOR (rotate / flip / four free corners with straightening)
+═══════════════════════════════════════════════════════════ */
+function quadClampPt(x,y,B){return {x:Math.max(B.x0,Math.min(B.x1,x)),y:Math.max(B.y0,Math.min(B.y1,y))};}
+function quadIsValid(q,min){
+  let sign=0;
+  for(let i=0;i<4;i++){
+    const a=q[i],b=q[(i+1)%4],c=q[(i+2)%4];
+    if(Math.hypot(b.x-a.x,b.y-a.y)<min)return false;
+    const cr=(b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x);
+    if(Math.abs(cr)<1e-6)return false;
+    const sg=cr>0?1:-1;
+    if(sign===0)sign=sg;else if(sg!==sign)return false;
+  }
+  return true;
+}
+function quadInside(q,px,py){
+  let inside=false;
+  for(let i=0,j=3;i<4;j=i++){
+    const xi=q[i].x,yi=q[i].y,xj=q[j].x,yj=q[j].y;
+    if(((yi>py)!==(yj>py))&&(px<(xj-xi)*(py-yi)/(yj-yi)+xi))inside=!inside;
+  }
+  return inside;
+}
+function quadHit(q,px,py,r){
+  let best=-1,bd=r;
+  for(let i=0;i<4;i++){const d=Math.hypot(q[i].x-px,q[i].y-py);if(d<=bd){bd=d;best=i;}}
+  if(best>=0)return best;
+  return quadInside(q,px,py)?'move':null;
+}
+function quadMovePoint(start,idx,dx,dy,B,min){
+  const q=start.map(p=>({x:p.x,y:p.y}));
+  q[idx]=quadClampPt(start[idx].x+dx,start[idx].y+dy,B);
+  return quadIsValid(q,min)?q:null;
+}
+function quadMoveAll(start,dx,dy,B){
+  let minx=Infinity,maxx=-Infinity,miny=Infinity,maxy=-Infinity;
+  start.forEach(p=>{minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);miny=Math.min(miny,p.y);maxy=Math.max(maxy,p.y);});
+  const mx=Math.max(B.x0-minx,Math.min(B.x1-maxx,dx)),my=Math.max(B.y0-miny,Math.min(B.y1-maxy,dy));
+  return start.map(p=>({x:p.x+mx,y:p.y+my}));
+}
+function quadHomography(q){
+  const p0=q[0],p1=q[1],p2=q[2],p3=q[3];
+  const dx1=p1.x-p2.x,dx2=p3.x-p2.x,dx3=p0.x-p1.x+p2.x-p3.x;
+  const dy1=p1.y-p2.y,dy2=p3.y-p2.y,dy3=p0.y-p1.y+p2.y-p3.y;
+  let g=0,h=0;
+  if(Math.abs(dx3)>1e-9||Math.abs(dy3)>1e-9){
+    const det=dx1*dy2-dx2*dy1;
+    g=(dx3*dy2-dx2*dy3)/det;h=(dx1*dy3-dx3*dy1)/det;
+  }
+  return {a:p1.x-p0.x+g*p1.x,b:p3.x-p0.x+h*p3.x,c:p0.x,d:p1.y-p0.y+g*p1.y,e:p3.y-p0.y+h*p3.y,f:p0.y,g:g,h:h};
+}
+function warpQuad(src,sw,sh,q,ow,oh){
+  const T=quadHomography(q),out=new Uint8ClampedArray(ow*oh*4);
+  let o=0;
+  for(let y=0;y<oh;y++){
+    const v=(y+0.5)/oh;
+    for(let x=0;x<ow;x++){
+      const u=(x+0.5)/ow,den=T.g*u+T.h*v+1;
+      let fx=(T.a*u+T.b*v+T.c)/den-0.5,fy=(T.d*u+T.e*v+T.f)/den-0.5;
+      fx=fx<0?0:fx>sw-1?sw-1:fx;fy=fy<0?0:fy>sh-1?sh-1:fy;
+      const x0=fx|0,y0=fy|0,x1=x0+1<sw?x0+1:x0,y1=y0+1<sh?y0+1:y0,tx=fx-x0,ty=fy-y0;
+      const i00=(y0*sw+x0)*4,i10=(y0*sw+x1)*4,i01=(y1*sw+x0)*4,i11=(y1*sw+x1)*4;
+      for(let c=0;c<3;c++){
+        const top=src[i00+c]+(src[i10+c]-src[i00+c])*tx,bot=src[i01+c]+(src[i11+c]-src[i01+c])*tx;
+        out[o+c]=top+(bot-top)*ty;
+      }
+      out[o+3]=255;o+=4;
+    }
+  }
+  return out;
+}
+function editImageFile(file){
+  return new Promise(resolve=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onerror=()=>{URL.revokeObjectURL(url);resolve({action:'original'});};
+    img.onload=()=>{
+      const MAXD=2400,MIN=40,HR=36,PAD=20;
+      const s0=Math.min(1,MAXD/Math.max(img.naturalWidth,img.naturalHeight));
+      const w0=Math.max(1,Math.round(img.naturalWidth*s0)),h0=Math.max(1,Math.round(img.naturalHeight*s0));
+      let rot=0,flip=false,ds=1,quad=[],B={x0:0,y0:0,x1:1,y1:1},drag=null,busy=false;
+      const work=document.createElement('canvas');
+      const mk=(tag,css,text)=>{const e=document.createElement(tag);if(css)e.style.cssText=css;if(text)e.textContent=text;return e;};
+      const ov=mk('div','position:fixed;inset:0;z-index:10500;background:#111;display:flex;flex-direction:column;direction:rtl;');
+      const bar=mk('div','display:flex;gap:6px;padding:8px;justify-content:center;flex-wrap:wrap;');
+      const hint=mk('div','color:#aab3c5;font-size:12px;text-align:center;padding:0 10px 4px;','حرّك كل ركن لوحده على حواف الورقة، والتطبيق هيعدّلها لمستطيل مستقيم');
+      const stage=mk('div','flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px;overflow:hidden;');
+      const view=mk('canvas','touch-action:none;max-width:100%;max-height:100%;');
+      const foot=mk('div','display:flex;gap:8px;padding:10px;');
+      const btns=[];
+      const tb=(label,fn)=>{const b=mk('button','background:#2a3447;color:#fff;border:1px solid #3d4a63;border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit;cursor:pointer',label);b.addEventListener('click',()=>{if(!busy)fn();});bar.appendChild(b);btns.push(b);return b;};
+      const fb=(label,css,fn)=>{const b=mk('button','flex:1;min-height:46px;border-radius:9px;font-size:14px;font-family:inherit;cursor:pointer;'+css,label);b.addEventListener('click',()=>{if(!busy)fn();});foot.appendChild(b);btns.push(b);return b;};
+      function fullQuad(){return [{x:B.x0,y:B.y0},{x:B.x1,y:B.y0},{x:B.x1,y:B.y1},{x:B.x0,y:B.y1}];}
+      function draw(){
+        const c=view.getContext('2d'),cw=view.width,ch=view.height;
+        c.clearRect(0,0,cw,ch);
+        c.drawImage(work,PAD,PAD,cw-2*PAD,ch-2*PAD);
+        c.save();c.beginPath();c.rect(0,0,cw,ch);
+        c.moveTo(quad[0].x,quad[0].y);for(let i=1;i<4;i++)c.lineTo(quad[i].x,quad[i].y);c.closePath();
+        c.fillStyle='rgba(0,0,0,0.55)';c.fill('evenodd');c.restore();
+        c.strokeStyle='#e8b93f';c.lineWidth=2;c.beginPath();
+        c.moveTo(quad[0].x,quad[0].y);for(let i=1;i<4;i++)c.lineTo(quad[i].x,quad[i].y);c.closePath();c.stroke();
+        quad.forEach(p=>{c.beginPath();c.arc(p.x,p.y,13,0,Math.PI*2);c.fillStyle='#e8b93f';c.fill();c.lineWidth=2;c.strokeStyle='#111';c.stroke();});
+      }
+      function build(){
+        const W=(rot%180===0)?w0:h0,H=(rot%180===0)?h0:w0;
+        work.width=W;work.height=H;
+        const c=work.getContext('2d');
+        c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,W,H);
+        c.save();c.translate(W/2,H/2);c.scale(flip?-1:1,1);c.rotate(rot*Math.PI/180);
+        c.drawImage(img,-w0/2,-h0/2,w0,h0);c.restore();
+        const aw=Math.max(100,stage.clientWidth-8-2*PAD),ah=Math.max(100,stage.clientHeight-8-2*PAD);
+        ds=Math.min(aw/W,ah/H,2);
+        view.width=Math.max(1,Math.round(W*ds))+2*PAD;view.height=Math.max(1,Math.round(H*ds))+2*PAD;
+        B={x0:PAD,y0:PAD,x1:view.width-PAD,y1:view.height-PAD};
+        quad=fullQuad();
+        draw();
+      }
+      function finish(res){
+        window.removeEventListener('resize',build);
+        URL.revokeObjectURL(url);
+        ov.remove();
+        resolve(res);
+      }
+      function result(){
+        const q=quad.map(p=>({x:(p.x-PAD)/ds,y:(p.y-PAD)/ds}));
+        const W=work.width,H=work.height;
+        const rectLike=Math.abs(q[0].x-q[3].x)<1.5&&Math.abs(q[1].x-q[2].x)<1.5&&Math.abs(q[0].y-q[1].y)<1.5&&Math.abs(q[3].y-q[2].y)<1.5;
+        const full=rectLike&&q[0].x<1.5&&q[0].y<1.5&&q[2].x>W-1.5&&q[2].y>H-1.5;
+        if(rot===0&&!flip&&full)return {action:'original'};
+        const out=document.createElement('canvas');
+        if(rectLike){
+          const sx=Math.max(0,Math.min(q[0].x,q[3].x)),sy=Math.max(0,Math.min(q[0].y,q[1].y));
+          const sw=Math.min(W-sx,Math.max(q[1].x,q[2].x)-sx),sh=Math.min(H-sy,Math.max(q[3].y,q[2].y)-sy);
+          out.width=Math.max(1,Math.round(sw));out.height=Math.max(1,Math.round(sh));
+          out.getContext('2d').drawImage(work,sx,sy,sw,sh,0,0,out.width,out.height);
+        }else{
+          const ow=Math.max(1,Math.round(Math.max(Math.hypot(q[1].x-q[0].x,q[1].y-q[0].y),Math.hypot(q[2].x-q[3].x,q[2].y-q[3].y))));
+          const oh=Math.max(1,Math.round(Math.max(Math.hypot(q[3].x-q[0].x,q[3].y-q[0].y),Math.hypot(q[2].x-q[1].x,q[2].y-q[1].y))));
+          const src=work.getContext('2d').getImageData(0,0,W,H).data;
+          const px=warpQuad(src,W,H,q,ow,oh);
+          out.width=ow;out.height=oh;
+          const oc=out.getContext('2d'),id=oc.createImageData(ow,oh);
+          id.data.set(px);oc.putImageData(id,0,0);
+        }
+        return {action:'edit',data:out.toDataURL('image/jpeg',0.9)};
+      }
+      tb('⟲ يسار',()=>{rot=(rot+270)%360;build();});
+      tb('⟳ يمين',()=>{rot=(rot+90)%360;build();});
+      tb('⇋ قلب',()=>{flip=!flip;build();});
+      tb('⛶ إعادة الأركان',()=>{quad=fullQuad();draw();});
+      const okBtn=fb('✅ تم','background:#27ae60;color:#fff;border:0',()=>{
+        busy=true;okBtn.textContent='جاري المعالجة...';
+        setTimeout(()=>{let r;try{r=result();}catch(e){r={action:'original'};}finish(r);},40);
+      });
+      fb('الأصل بدون تعديل','background:#2a3447;color:#fff;border:1px solid #3d4a63',()=>finish({action:'original'}));
+      fb('✖ تجاهل الصورة','background:#7a2a2a;color:#fff;border:0',()=>finish({action:'skip'}));
+      const pos=e=>{const r=view.getBoundingClientRect();return {x:(e.clientX-r.left)*view.width/r.width,y:(e.clientY-r.top)*view.height/r.height};};
+      view.addEventListener('pointerdown',e=>{
+        if(busy)return;
+        const p=pos(e),m=quadHit(quad,p.x,p.y,HR);
+        if(m===null)return;
+        drag={mode:m,sx:p.x,sy:p.y,start:quad.map(q=>({x:q.x,y:q.y}))};
+        try{view.setPointerCapture(e.pointerId);}catch(_){}
+        e.preventDefault();
+      });
+      view.addEventListener('pointermove',e=>{
+        if(!drag)return;
+        const p=pos(e),dx=p.x-drag.sx,dy=p.y-drag.sy;
+        if(drag.mode==='move')quad=quadMoveAll(drag.start,dx,dy,B);
+        else{const nq=quadMovePoint(drag.start,drag.mode,dx,dy,B,MIN);if(nq)quad=nq;}
+        draw();
+      });
+      const endDrag=()=>{drag=null;};
+      view.addEventListener('pointerup',endDrag);
+      view.addEventListener('pointercancel',endDrag);
+      stage.appendChild(view);
+      ov.appendChild(bar);ov.appendChild(hint);ov.appendChild(stage);ov.appendChild(foot);
+      document.body.appendChild(ov);
+      window.addEventListener('resize',build);
+      requestAnimationFrame(build);
+    };
+    img.src=url;
+  });
+}
+
+async function editStoredImage(dataUrl){
+  try{
+    const r=await editImageFile(dataURLtoBlob(dataUrl));
+    return r.action==='edit'?r.data:null;
+  }catch(e){alert('تعذر فتح الصورة للتعديل');return null;}
+}
 async function handleImageUpload(type,files){
   if(!currentPatient)return;
   for(const file of files){
     if(!file.type.startsWith('image/'))continue;
     try{
-      const data=await compressIfLarge(file);
+      const ed=await editImageFile(file);
+      if(ed.action==='skip')continue;
+      const data=ed.action==='edit'?ed.data:await compressIfLarge(file);
       const img={
         id:'IMG-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
         patientId:currentPatient.id,type,
@@ -2112,8 +2358,18 @@ function renderAttachments(){
     div.className='attach-item';
     const isImage=att.mimeType&&att.mimeType.startsWith('image/');
     const icon=isImage?'🖼️':att.mimeType?.includes('pdf')?'📄':att.mimeType?.includes('word')?'📝':att.mimeType?.includes('excel')||att.mimeType?.includes('sheet')?'📊':'📎';
-    div.innerHTML=`<div class="att-info"><div class="att-name">${icon} ${escapeHtml(att.name)}</div><div class="att-meta">${fmtBytes(att.size||0)} · ${new Date(att.createdAt).toLocaleDateString('ar-EG')}</div></div><div class="att-actions"><button class="btn-outline btn-sm" data-action="open">فتح</button><button class="btn-danger btn-sm" data-action="del">✕</button></div>`;
+    div.innerHTML=`<div class="att-info"><div class="att-name">${icon} ${escapeHtml(att.name)}</div><div class="att-meta">${fmtBytes(att.size||0)} · ${new Date(att.createdAt).toLocaleDateString('ar-EG')}</div></div><div class="att-actions">${isImage?'<button class="btn-outline btn-sm" data-action="edit">✏️ تعديل</button>':''}<button class="btn-outline btn-sm" data-action="open">فتح</button><button class="btn-danger btn-sm" data-action="del">✕</button></div>`;
     div.querySelector('[data-action="open"]').onclick=()=>openAttachment(att);
+    const editB=div.querySelector('[data-action="edit"]');
+    if(editB)editB.onclick=async()=>{
+      const nd=await editStoredImage(att.data);
+      if(!nd)return;
+      att.data=nd;att.mimeType='image/jpeg';
+      att.name=att.name.replace(/\.[^.]+$/,'')+'.jpg';
+      att.size=Math.round(nd.length*0.75);
+      await saveImageRecord(att);
+      renderAttachments();
+    };
     div.querySelector('[data-action="del"]').onclick=async()=>{
       if(!await askConfirm('حذف المرفق؟'))return;
       await deleteImageRecord(att.id);
@@ -2142,12 +2398,22 @@ async function handleAttachmentUpload(files){
       if(!await askConfirm(`${file.name} حجمه ${fmtBytes(file.size)}. قد يبطئ التطبيق. متابعة؟`))continue;
     }
     try{
-      const data=await readAsDataURL(file);
+      let data=null,mimeType=file.type||'application/octet-stream',attName=file.name,attSize=file.size;
+      if(file.type&&file.type.startsWith('image/')){
+        const ed=await editImageFile(file);
+        if(ed.action==='skip')continue;
+        if(ed.action==='edit'){
+          data=ed.data;mimeType='image/jpeg';
+          attName=file.name.replace(/\.[^.]+$/,'')+'.jpg';
+          attSize=Math.round(ed.data.length*0.75);
+        }
+      }
+      if(!data)data=await readAsDataURL(file);
       const att={
         id:'ATT-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
         patientId:currentPatient.id,type:'attachment',
-        name:file.name,mimeType:file.type||'application/octet-stream',
-        data,size:file.size,createdAt:Date.now()
+        name:attName,mimeType:mimeType,
+        data,size:attSize,createdAt:Date.now()
       };
       await saveImageRecord(att);
       currentAttachments.unshift(att);
@@ -2218,18 +2484,26 @@ document.getElementById('addFollowupBtn').addEventListener('click',async()=>{
 /* ═══════════════════════════════════════════════════════════
    TIMELINE
 ═══════════════════════════════════════════════════════════ */
+function timelineDayStart(ts){const d=new Date(ts);return new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();}
+function timelineOrder(){try{return localStorage.getItem('ped_tl_order')==='asc'?'asc':'desc';}catch(e){return 'desc';}}
+function sortTimelineEvents(events,order){
+  events.forEach(e=>{e.day=timelineDayStart(e.ts);});
+  events.sort((a,b)=>(a.day-b.day)||(a.rank-b.rank));
+  if(order==='desc')events.reverse();
+  return events;
+}
 function renderTimeline(){
   if(!currentPatient)return;
   const p=currentPatient;
   const events=[];
-  if(p.createdAt)events.push({ts:p.createdAt,type:'created',title:'إنشاء الملف',desc:'تم فتح ملف المريض'});
-  if(p.firstVisit)events.push({ts:new Date(p.firstVisit+'T00:00:00').getTime(),type:'visit',title:'أول زيارة',desc:''});
-  if(p.surgeryDate)events.push({ts:new Date(p.surgeryDate+'T00:00:00').getTime(),type:'surgery',title:'🔪 الجراحة',desc:(p.surgeryType==='Other'?p.surgeryCustom:p.surgeryType)||p.surgeryCustom||''});
+  if(p.createdAt)events.push({ts:p.createdAt,type:'created',rank:0,title:'إنشاء الملف',desc:'تم فتح ملف المريض'});
+  if(p.firstVisit)events.push({ts:new Date(p.firstVisit+'T00:00:00').getTime(),type:'visit',rank:1,title:'أول زيارة',desc:''});
+  if(p.surgeryDate)events.push({ts:new Date(p.surgeryDate+'T00:00:00').getTime(),type:'surgery',rank:2,title:'🔪 الجراحة',desc:(p.surgeryType==='Other'?p.surgeryCustom:p.surgeryType)||p.surgeryCustom||''});
   (p.followups||[]).forEach(f=>{
-    events.push({ts:new Date(f.date+'T00:00:00').getTime(),type:'followup',title:'📅 متابعة',desc:f.note||''});
+    events.push({ts:new Date(f.date+'T00:00:00').getTime(),type:'followup',rank:3,title:'📅 متابعة',desc:f.note||''});
   });
   (p.sideLog||[]).forEach(e=>{
-    events.push({ts:e.ts,type:'visit',title:'✅ انتهى علاج الجانب '+(e.finished==='right'?'اليمين':'الشمال'),desc:'الجانب المتبقي: '+(e.finished==='right'?'الشمال':'اليمين')});
+    events.push({ts:e.ts,type:'visit',rank:4,title:'✅ انتهى علاج الجانب '+(e.finished==='right'?'اليمين':'الشمال'),desc:'الجانب المتبقي: '+(e.finished==='right'?'الشمال':'اليمين')});
   });
   const imgGroups={};
   [...(currentImages.preop||[]),...(currentImages.postop||[])].forEach(img=>{
@@ -2243,9 +2517,11 @@ function renderTimeline(){
     const parts=[];
     if(g.pre)parts.push(`${g.pre} قبل الجراحة`);
     if(g.post)parts.push(`${g.post} بعد الجراحة`);
-    events.push({ts:new Date(date+'T00:00:00').getTime(),type:'image',title:'🖼️ صور مرفوعة',desc:parts.join(' · ')});
+    events.push({ts:new Date(date+'T00:00:00').getTime(),type:'image',rank:5,title:'🖼️ صور مرفوعة',desc:parts.join(' · ')});
   });
-  events.sort((a,b)=>b.ts-a.ts);
+  const order=timelineOrder();
+  sortTimelineEvents(events,order);
+  document.getElementById('timelineSortBtn').textContent=order==='asc'?'↕ الترتيب: الأقدم أولًا (اضغط للتبديل)':'↕ الترتيب: الأحدث أولًا (اضغط للتبديل)';
   const list=document.getElementById('timelineList');
   const empty=document.getElementById('timelineEmpty');
   list.innerHTML='';
@@ -2258,6 +2534,11 @@ function renderTimeline(){
     list.appendChild(div);
   });
 }
+
+document.getElementById('timelineSortBtn').addEventListener('click',()=>{
+  try{localStorage.setItem('ped_tl_order',timelineOrder()==='asc'?'desc':'asc');}catch(e){}
+  renderTimeline();
+});
 
 /* ═══════════════════════════════════════════════════════════
    GROWTH CHART
@@ -3297,6 +3578,21 @@ function buildExportHTML(opts){
   if(opts.postop&&postop.length){
     html+=`<div class="print-section"><h2>صور بعد الجراحة (${postop.length})</h2><div class="print-images">${postop.slice(0,9).map(i=>`<img src="${escapeHtml(i.data)}" alt="">`).join('')}</div></div>`;
   }
+  const atts=(opts.attachments&&Array.isArray(currentAttachments))?currentAttachments:[];
+  if(atts.length){
+    const imgs=atts.filter(a=>a.mimeType&&a.mimeType.startsWith('image/'));
+    const others=atts.filter(a=>!(a.mimeType&&a.mimeType.startsWith('image/')));
+    let a2=`<div class="print-section"><h2>المرفقات (${atts.length})</h2>`;
+    imgs.slice(0,20).forEach(a=>{
+      a2+=`<div class="print-attach avoid-break"><img src="${escapeHtml(a.data)}" alt=""><div class="cap">${escapeHtml(a.name)}</div></div>`;
+    });
+    if(imgs.length>20)a2+=`<div class="print-attach-list">… و${imgs.length-20} صورة أخرى لم تُعرض (الحد الأقصى 20).</div>`;
+    if(others.length){
+      a2+='<div class="print-attach-list"><strong>ملفات أخرى (الأسماء فقط، غير مدرجة داخل التقرير):</strong><br>'+
+        others.map(a=>'📎 '+escapeHtml(a.name)+' · '+escapeHtml(fmtBytes(a.size||0))+' · '+escapeHtml(new Date(a.createdAt).toLocaleDateString('ar-EG'))).join('<br>')+'</div>';
+    }
+    html+=a2+'</div>';
+  }
   html+=`<div class="print-footer">تم استخراج التقرير في ${new Date().toLocaleString('ar-EG')}</div>`;
   return html;
 }
@@ -3322,6 +3618,10 @@ const CANVAS_CSS=`
 .print-fu-list li{padding:3px 0;border-bottom:1px dotted #ccc}
 .print-images{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
 .print-images img{width:100%;height:auto;border:1px solid #ccc;border-radius:3px}
+.print-attach{margin:8px 0;text-align:center;page-break-inside:avoid}
+.print-attach img{max-width:100%;max-height:640px;border:1px solid #ccc;border-radius:3px}
+.print-attach .cap{font-size:10px;color:#555;margin-top:2px}
+.print-attach-list{font-size:11px;margin:6px 0;line-height:1.9}
 .print-footer{margin-top:16px;text-align:center;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:6px}
 .print-allergy-alert{background:#ffebee;border:2px solid #c0392b;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:700;color:#c0392b}
 .print-table{width:100%;border-collapse:collapse;font-size:10.5px;margin-bottom:6px}
@@ -3329,15 +3629,57 @@ const CANVAS_CSS=`
 .print-table th{background:#1b3a5c;color:#fff;font-weight:700}
 .print-table tr:nth-child(even){background:#f5f5f5}
 `;
+/* In the PDF/image export, html2canvas draws characters like ">" without knowing they sit inside an
+   English phrase, so they can come out mirrored. We wrap English phrases that contain such signs in
+   an explicit left-to-right span, in the temporary copy only. */
+function latinRunSegments(text){
+  const re=/[A-Za-z0-9][A-Za-z0-9 .,:;'"+\-=\/%*&_@#~|!?<>()\[\]{}]*[A-Za-z0-9>)\]}]|[A-Za-z0-9]/g;
+  const out=[];let last=0,m;
+  while((m=re.exec(text))!==null){
+    if(!/[<>()\[\]{}]/.test(m[0]))continue;
+    if(m.index>last)out.push({t:text.slice(last,m.index),ltr:false});
+    out.push({t:m[0],ltr:true});
+    last=m.index+m[0].length;
+  }
+  if(last<text.length)out.push({t:text.slice(last),ltr:false});
+  return out;
+}
+function wrapLatinRunsForCanvas(rootEl){
+  const doc=rootEl.ownerDocument,view=doc.defaultView;
+  const walker=doc.createTreeWalker(rootEl,4);
+  const nodes=[];
+  while(walker.nextNode())nodes.push(walker.currentNode);
+  nodes.forEach(n=>{
+    const el=n.parentElement;
+    if(!el||el.tagName==='STYLE'||el.tagName==='SCRIPT')return;
+    if(!/[<>()\[\]{}]/.test(n.nodeValue)||!/[A-Za-z0-9]/.test(n.nodeValue))return;
+    if(view.getComputedStyle(el).direction!=='rtl')return;
+    const segs=latinRunSegments(n.nodeValue);
+    if(!segs.some(x=>x.ltr))return;
+    const frag=doc.createDocumentFragment();
+    segs.forEach(x=>{
+      if(x.ltr){
+        const sp=doc.createElement('span');
+        sp.setAttribute('dir','ltr');
+        sp.style.direction='ltr';
+        sp.style.unicodeBidi='isolate';
+        sp.textContent=x.t;
+        frag.appendChild(sp);
+      }else frag.appendChild(doc.createTextNode(x.t));
+    });
+    el.replaceChild(frag,n);
+  });
+}
 async function renderToCanvas(opts){
   if(typeof html2canvas!=='function')throw new Error('مكتبة الصورة لم تُحمّل');
   const div=document.createElement('div');
-  div.style.cssText='position:fixed;left:-9999px;top:0;width:794px;background:#fff;padding:24px;font-family:"Segoe UI",Tahoma,Arial,sans-serif;direction:rtl;';
+  div.id='exportRoot';
+  div.style.cssText='position:fixed;left:-9999px;top:0;width:794px;background:#fff;color:#1a1a1a;padding:24px;font-family:"Segoe UI",Tahoma,Arial,sans-serif;direction:rtl;';
   div.innerHTML=`<style>${CANVAS_CSS}</style>${buildExportHTML(opts)}`;
   document.body.appendChild(div);
   try{
     await Promise.all([...div.querySelectorAll('img')].map(img=>(img.complete&&img.naturalWidth)?Promise.resolve():new Promise(r=>{img.onload=img.onerror=r;})));
-    const canvas=await html2canvas(div,{scale:2,backgroundColor:'#fff',useCORS:true});
+    const canvas=await html2canvas(div,{scale:2,backgroundColor:'#fff',useCORS:true,onclone:doc=>{try{const r=doc.getElementById('exportRoot');if(r)wrapLatinRunsForCanvas(r);}catch(e){}}});
     const base=div.getBoundingClientRect().top;
     canvas._avoid=[...div.querySelectorAll('.avoid-break')].map(el=>{
       const r=el.getBoundingClientRect();
